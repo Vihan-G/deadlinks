@@ -16,7 +16,7 @@ docs/guide.md:42: 404 https://example.org/old-page
 - Network errors and timeouts are not reported as dead, to avoid false alarms.
 - Exit code `1` when dead links exist, so it works in CI.
 
-Options: `--timeout SECONDS` (default 10), `--workers N` (default 16), `--ignore REGEX`.
+Options: `--timeout SECONDS` (default 10), `--workers N` (default 16), `--ignore REGEX`, `--json` (machine-readable output).
 
 ## Tests
 
