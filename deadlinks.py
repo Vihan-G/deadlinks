@@ -6,6 +6,7 @@ Exit code is 1 if any dead link is found, 0 otherwise.
 import argparse
 import concurrent.futures as cf
 import http.client
+import json
 import os
 import re
 import sys
@@ -88,11 +89,15 @@ def main(argv=None):
     parser.add_argument("--timeout", type=float, default=10)
     parser.add_argument("--workers", type=int, default=16)
     parser.add_argument("--ignore", help="regex of URLs to skip")
+    parser.add_argument("--json", action="store_true", help="print results as a JSON list")
     args = parser.parse_args(argv)
     dead = find_dead(args.paths, args.timeout, args.workers, args.ignore)
-    for path, line, url, status in dead:
-        print(f"{path}:{line}: {status} {url}")
-    print(f"{len(dead)} dead link(s)")
+    if args.json:
+        print(json.dumps([{"file": p, "line": n, "url": u, "status": s} for p, n, u, s in dead], indent=2))
+    else:
+        for path, line, url, status in dead:
+            print(f"{path}:{line}: {status} {url}")
+        print(f"{len(dead)} dead link(s)")
     return 1 if dead else 0
 
 
