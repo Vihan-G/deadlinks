@@ -56,3 +56,12 @@ def test_check_url_survives_malformed_url():
 def test_markdown_bold_wrapper_is_not_part_of_url():
     text = "**[datetime](https://docs.python.org/3/library/datetime.html)**"
     assert [u for _, u in deadlinks.extract_urls(text)] == ["https://docs.python.org/3/library/datetime.html"]
+
+
+def test_json_output(tmp_path, capsys, monkeypatch):
+    import json
+    monkeypatch.setattr(deadlinks, "find_dead",
+                        lambda *a, **k: [("a.md", 3, "https://gone.test/x", 404)])
+    assert deadlinks.main([str(tmp_path), "--json"]) == 1
+    assert json.loads(capsys.readouterr().out) == [
+        {"file": "a.md", "line": 3, "url": "https://gone.test/x", "status": 404}]
