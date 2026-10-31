@@ -14,9 +14,10 @@ docs/guide.md:42: 404 https://example.org/old-page
 - Skips placeholder hosts (`example.com`, `localhost`) and templated URLs like `https://x.org/{id}`.
 - Tries `HEAD` first and falls back to `GET` for servers that reject `HEAD`.
 - Network errors and timeouts are not reported as dead, to avoid false alarms.
+- Can also report links that redirect (`--moved`) so they can be updated to their final address.
 - Exit code `1` when dead links exist, so it works in CI.
 
-Options: `--timeout SECONDS` (default 10), `--workers N` (default 16), `--ignore REGEX`, `--json` (machine-readable output).
+Options: `--timeout SECONDS` (default 10), `--workers N` (default 16), `--ignore REGEX`, `--json` (machine-readable output), `--moved` (report redirected links).
 
 ## Tests
 
