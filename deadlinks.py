@@ -50,24 +50,38 @@ def iter_files(paths):
 
 
 def check_url(url, timeout=10):
-    """Return an HTTP status code, or None if the host could not be reached."""
+    """Return (status, final_url) after following redirects.
+
+    status is None if the host could not be reached. final_url differs from
+    url when the link redirects, so callers can report moved links.
+    """
     headers = {"User-Agent": "Mozilla/5.0 (deadlinks)"}
     for method in ("HEAD", "GET"):
         request = urllib.request.Request(url, method=method, headers=headers)
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
-                return response.status
+                return response.status, response.geturl()
         except urllib.error.HTTPError as error:
             if method == "HEAD" and error.code in (403, 404, 405, 501):
                 continue  # some servers reject HEAD; confirm with GET
-            return error.code
+            return error.code, url
         except (urllib.error.URLError, http.client.HTTPException, TimeoutError, ValueError, OSError):
-            return None
-    return None
+            return None, url
+    return None, url
+
+
+def _moved(url, final_url):
+    """True when a redirect target is meaningfully different from the original."""
+    return bool(final_url) and final_url.rstrip("/") != url.rstrip("/")
 
 
 def find_dead(paths, timeout=10, workers=16, ignore=None, checker=check_url):
-    """Return a sorted list of (file, line, url, status) for links answering 404 or 410."""
+    """Return (dead, moved).
+
+    dead is a sorted list of (file, line, url, status) for links answering
+    404 or 410. moved is a sorted list of (file, line, url, final_url) for
+    links that redirect to a different address.
+    """
     ignore_re = re.compile(ignore) if ignore else None
     first_seen = {}
     for path in iter_files(paths):
@@ -78,9 +92,16 @@ def find_dead(paths, timeout=10, workers=16, ignore=None, checker=check_url):
                 first_seen.setdefault(url, (path, number))
     urls = list(first_seen)
     with cf.ThreadPoolExecutor(workers) as pool:
-        statuses = list(pool.map(lambda u: checker(u, timeout), urls))
-    dead = [(*first_seen[u], u, s) for u, s in zip(urls, statuses) if s in (404, 410)]
-    return sorted(dead)
+        results = list(pool.map(lambda u: checker(u, timeout), urls))
+    dead = []
+    moved = []
+    for url, (status, final_url) in zip(urls, results):
+        path, number = first_seen[url]
+        if status in (404, 410):
+            dead.append((path, number, url, status))
+        elif _moved(url, final_url):
+            moved.append((path, number, url, final_url))
+    return sorted(dead), sorted(moved)
 
 
 def main(argv=None):
@@ -90,14 +111,23 @@ def main(argv=None):
     parser.add_argument("--workers", type=int, default=16)
     parser.add_argument("--ignore", help="regex of URLs to skip")
     parser.add_argument("--json", action="store_true", help="print results as a JSON list")
+    parser.add_argument("--moved", action="store_true", help="also report links that redirect")
     args = parser.parse_args(argv)
-    dead = find_dead(args.paths, args.timeout, args.workers, args.ignore)
+    dead, moved = find_dead(args.paths, args.timeout, args.workers, args.ignore)
     if args.json:
-        print(json.dumps([{"file": p, "line": n, "url": u, "status": s} for p, n, u, s in dead], indent=2))
+        records = [{"file": p, "line": n, "url": u, "status": s} for p, n, u, s in dead]
+        if args.moved:
+            records += [{"file": p, "line": n, "url": u, "status": "moved", "final_url": f}
+                        for p, n, u, f in moved]
+        print(json.dumps(records, indent=2))
     else:
         for path, line, url, status in dead:
             print(f"{path}:{line}: {status} {url}")
         print(f"{len(dead)} dead link(s)")
+        if args.moved:
+            for path, line, url, final_url in moved:
+                print(f"{path}:{line}: moved {url} -> {final_url}")
+            print(f"{len(moved)} moved link(s)")
     return 1 if dead else 0
 
 
