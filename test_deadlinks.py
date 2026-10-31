@@ -19,6 +19,10 @@ def test_placeholders_are_skipped():
     assert not deadlinks.is_placeholder("https://python.org/")
 
 
+def _checker(codes):
+    return lambda u, t: (codes.get(u, 200), u)
+
+
 def test_find_dead_reports_only_404_and_410(tmp_path):
     (tmp_path / "doc.md").write_text(
         "ok https://ok.test/a\ngone https://gone.test/b\nold https://old.test/c\n"
@@ -26,31 +30,51 @@ def test_find_dead_reports_only_404_and_410(tmp_path):
     )
     codes = {"https://ok.test/a": 200, "https://gone.test/b": 404,
              "https://old.test/c": 410, "https://down.test/d": None}
-    dead = deadlinks.find_dead(
-        [str(tmp_path)], ignore="skip.test", checker=lambda u, t: codes.get(u, 200)
+    dead, moved = deadlinks.find_dead(
+        [str(tmp_path)], ignore="skip.test", checker=_checker(codes)
     )
     assert [(line, url, status) for _, line, url, status in dead] == [
         (2, "https://gone.test/b", 404), (3, "https://old.test/c", 410)]
+    assert moved == []
+
+
+def test_moved_links_are_reported(tmp_path):
+    (tmp_path / "doc.md").write_text(
+        "old https://old.test/page\nfine https://fine.test/page\n"
+    )
+    finals = {"https://old.test/page": "https://new.test/page"}
+    checker = lambda u, t: (200, finals.get(u, u))
+    dead, moved = deadlinks.find_dead([str(tmp_path)], checker=checker)
+    assert dead == []
+    assert moved == [(str(tmp_path / "doc.md"), 1, "https://old.test/page", "https://new.test/page")]
+
+
+def test_trailing_slash_redirect_is_not_moved(tmp_path):
+    (tmp_path / "doc.md").write_text("link https://x.test/page\n")
+    checker = lambda u, t: (200, u + "/")
+    dead, moved = deadlinks.find_dead([str(tmp_path)], checker=checker)
+    assert dead == [] and moved == []
 
 
 def test_each_url_reported_once_at_first_location(tmp_path):
     (tmp_path / "a.md").write_text("https://gone.test/x\n")
     (tmp_path / "b.md").write_text("\nhttps://gone.test/x\n")
-    dead = deadlinks.find_dead([str(tmp_path)], checker=lambda u, t: 404)
+    dead, moved = deadlinks.find_dead([str(tmp_path)], checker=lambda u, t: (404, u))
     assert len(dead) == 1 and dead[0][0].endswith("a.md")
 
 
 def test_main_exit_code(tmp_path, capsys, monkeypatch):
     (tmp_path / "a.md").write_text("https://gone.test/x\n")
-    monkeypatch.setattr(deadlinks, "check_url", lambda u, t=10: 404)
+    monkeypatch.setattr(deadlinks, "check_url", lambda u, t=10: (404, u))
     monkeypatch.setattr(deadlinks, "find_dead",
-                        lambda *a, **k: [("a.md", 1, "https://gone.test/x", 404)])
+                        lambda *a, **k: ([("a.md", 1, "https://gone.test/x", 404)], []))
     assert deadlinks.main([str(tmp_path)]) == 1
     assert "1 dead link(s)" in capsys.readouterr().out
 
 
 def test_check_url_survives_malformed_url():
-    assert deadlinks.check_url("https://host:%d%s/path", timeout=1) is None
+    url = "https://host:%d%s/path"
+    assert deadlinks.check_url(url, timeout=1) == (None, url)
 
 
 def test_markdown_bold_wrapper_is_not_part_of_url():
@@ -61,7 +85,26 @@ def test_markdown_bold_wrapper_is_not_part_of_url():
 def test_json_output(tmp_path, capsys, monkeypatch):
     import json
     monkeypatch.setattr(deadlinks, "find_dead",
-                        lambda *a, **k: [("a.md", 3, "https://gone.test/x", 404)])
+                        lambda *a, **k: ([("a.md", 3, "https://gone.test/x", 404)], []))
     assert deadlinks.main([str(tmp_path), "--json"]) == 1
     assert json.loads(capsys.readouterr().out) == [
         {"file": "a.md", "line": 3, "url": "https://gone.test/x", "status": 404}]
+
+
+def test_moved_text_output(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(deadlinks, "find_dead",
+                        lambda *a, **k: ([], [("a.md", 2, "https://old.test/x", "https://new.test/x")]))
+    assert deadlinks.main([str(tmp_path), "--moved"]) == 0
+    out = capsys.readouterr().out
+    assert "a.md:2: moved https://old.test/x -> https://new.test/x" in out
+    assert "1 moved link(s)" in out
+
+
+def test_moved_json_output(tmp_path, capsys, monkeypatch):
+    import json
+    monkeypatch.setattr(deadlinks, "find_dead",
+                        lambda *a, **k: ([], [("a.md", 2, "https://old.test/x", "https://new.test/x")]))
+    assert deadlinks.main([str(tmp_path), "--json", "--moved"]) == 0
+    assert json.loads(capsys.readouterr().out) == [
+        {"file": "a.md", "line": 2, "url": "https://old.test/x", "status": "moved",
+         "final_url": "https://new.test/x"}]
