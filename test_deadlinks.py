@@ -108,3 +108,29 @@ def test_moved_json_output(tmp_path, capsys, monkeypatch):
     assert json.loads(capsys.readouterr().out) == [
         {"file": "a.md", "line": 2, "url": "https://old.test/x", "status": "moved",
          "final_url": "https://new.test/x"}]
+
+
+
+def test_rst_wrapped_link_target_is_joined():
+    text = ("See `Configuring MathJax`__.\n\n"
+            "   __ https://docs.mathjax.org/en/stable/web/\n"
+            "      configuration.html#configuration\n")
+    assert deadlinks.extract_urls(text) == [
+        (3, "https://docs.mathjax.org/en/stable/web/configuration.html#configuration")]
+
+
+def test_rst_multi_line_wrapped_target():
+    text = ("__ https://a.test/docs/\n"
+            "   reference/\n"
+            "   guide.html\n")
+    assert deadlinks.extract_urls(text) == [(1, "https://a.test/docs/reference/guide.html")]
+
+
+def test_indented_line_after_url_is_not_joined():
+    text = "Docs at https://docs.test/page\n    indented_code()\n"
+    assert deadlinks.extract_urls(text) == [(1, "https://docs.test/page")]
+
+
+def test_directive_after_url_is_not_joined():
+    text = "__ https://a.test/docs/\n.. note:: text\n"
+    assert deadlinks.extract_urls(text) == [(1, "https://a.test/docs/")]
