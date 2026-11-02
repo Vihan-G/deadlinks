@@ -20,15 +20,45 @@ SKIP_DIRS = {".git", "node_modules", "_build", "build", "dist", ".venv", "venv"}
 PLACEHOLDER_HOSTS = {"example.com", "example.org", "example.net", "localhost", "127.0.0.1", "0.0.0.0"}
 
 
+def _clean_url(url):
+    url = url.rstrip(".,;:!?*_")
+    while url.endswith(")") and url.count("(") < url.count(")"):
+        url = url[:-1].rstrip(".,;:!?*_")
+    return url
+
+
 def extract_urls(text):
-    """Return a list of (line_number, url) found in text."""
+    """Return a list of (line_number, url) found in text.
+
+    A link target that ends a line is joined with following indented
+    single-token lines, which is how reStructuredText wraps long targets;
+    without this a wrapped target is checked (and reported) truncated.
+    """
+    lines = text.splitlines()
     found = []
-    for number, line in enumerate(text.splitlines(), 1):
-        for match in URL_RE.findall(line):
-            url = match.rstrip(".,;:!?*_")
-            while url.endswith(")") and url.count("(") < url.count(")"):
-                url = url[:-1].rstrip(".,;:!?*_")
-            found.append((number, url))
+    i = 0
+    while i < len(lines):
+        matches = URL_RE.findall(lines[i])
+        if matches:
+            url = _clean_url(matches[-1])
+            if lines[i].rstrip().endswith(url):
+                j = i + 1
+                while url.endswith(("/", "-", "#", "&", "=", "_")) and j < len(lines):
+                    cont = lines[j].strip()
+                    if (lines[j][:1] in (" ", "\t") and cont and " " not in cont
+                            and "\t" not in cont and not cont.startswith("..")):
+                        url += cont
+                        j += 1
+                    else:
+                        break
+                for m in matches[:-1]:
+                    found.append((i + 1, _clean_url(m)))
+                found.append((i + 1, _clean_url(url)))
+                i = j if j > i + 1 else i + 1
+                continue
+            for m in matches:
+                found.append((i + 1, _clean_url(m)))
+        i += 1
     return found
 
 
@@ -133,3 +163,4 @@ def main(argv=None):
 
 if __name__ == "__main__":
     sys.exit(main())
+
