@@ -17,7 +17,7 @@ docs/guide.md:42: 404 https://example.org/old-page
 - Can also report links that redirect (`--moved`) so they can be updated to their final address.
 - Exit code `1` when dead links exist, so it works in CI.
 
-Options: `--timeout SECONDS` (default 10), `--workers N` (default 16), `--ignore REGEX`, `--json` (machine-readable output), `--moved` (report redirected links).
+Options: `--timeout SECONDS` (default 10), `--workers N` (default 16), `--ignore REGEX`, `--json` (machine-readable output), `--moved` (report redirected links), `--retries N` (retry transient failures, default 1).
 
 ## Tests
 
@@ -27,3 +27,4 @@ pytest
 ```
 
 Python 3.8+. MIT licensed.
+
