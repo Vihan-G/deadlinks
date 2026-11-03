@@ -134,3 +134,78 @@ def test_indented_line_after_url_is_not_joined():
 def test_directive_after_url_is_not_joined():
     text = "__ https://a.test/docs/\n.. note:: text\n"
     assert deadlinks.extract_urls(text) == [(1, "https://a.test/docs/")]
+
+
+class _FakeResponse:
+    def __init__(self, status, url):
+        self.status = status
+        self._url = url
+
+    def geturl(self):
+        return self._url
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+
+def test_check_url_retries_transient_5xx(monkeypatch):
+    import urllib.error
+    calls = []
+
+    def fake_urlopen(request, timeout=10):
+        calls.append(request.get_method())
+        if len(calls) == 1:
+            raise urllib.error.HTTPError("https://x.test/", 503, "err", {}, None)
+        return _FakeResponse(200, "https://x.test/")
+
+    monkeypatch.setattr(deadlinks.urllib.request, "urlopen", fake_urlopen)
+    sleeps = []
+    status, final = deadlinks.check_url("https://x.test/", retries=1, sleeper=sleeps.append)
+    assert (status, final) == (200, "https://x.test/")
+    assert calls == ["HEAD", "HEAD"]
+    assert sleeps == [1.0]
+
+
+def test_check_url_does_not_retry_permanent_404(monkeypatch):
+    import urllib.error
+    calls = []
+
+    def fake_urlopen(request, timeout=10):
+        calls.append(request.get_method())
+        raise urllib.error.HTTPError("https://x.test/", 404, "err", {}, None)
+
+    monkeypatch.setattr(deadlinks.urllib.request, "urlopen", fake_urlopen)
+    status, _ = deadlinks.check_url("https://x.test/", retries=2, sleeper=lambda s: None)
+    assert status == 404
+    assert calls == ["HEAD", "GET"]  # one attempt only: HEAD falls back to GET
+
+
+def test_check_url_retries_network_error_then_gives_up(monkeypatch):
+    import urllib.error
+    calls = []
+
+    def fake_urlopen(request, timeout=10):
+        calls.append(1)
+        raise urllib.error.URLError("unreachable")
+
+    monkeypatch.setattr(deadlinks.urllib.request, "urlopen", fake_urlopen)
+    sleeps = []
+    status, final = deadlinks.check_url("https://x.test/", retries=2, retry_delay=0.5, sleeper=sleeps.append)
+    assert (status, final) == (None, "https://x.test/")
+    assert len(calls) == 3 and sleeps == [0.5, 0.5]
+
+
+def test_retries_cli_option_is_forwarded(tmp_path, capsys, monkeypatch):
+    seen = {}
+
+    def fake_check(u, t=10, retries=1):
+        seen["retries"] = retries
+        return (200, u)
+
+    (tmp_path / "a.md").write_text("https://ok.test/x\n")
+    monkeypatch.setattr(deadlinks, "check_url", fake_check)
+    assert deadlinks.main([str(tmp_path), "--retries", "3"]) == 0
+    assert seen["retries"] == 3
