@@ -10,6 +10,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -79,13 +80,11 @@ def iter_files(paths):
                     yield os.path.join(root, name)
 
 
-def check_url(url, timeout=10):
-    """Return (status, final_url) after following redirects.
+# Server answers that are usually temporary, so they are worth a retry.
+TRANSIENT_STATUS = {500, 502, 503, 504}
 
-    status is None if the host could not be reached. final_url differs from
-    url when the link redirects, so callers can report moved links.
-    """
-    headers = {"User-Agent": "Mozilla/5.0 (deadlinks)"}
+
+def _request_once(url, headers, timeout):
     for method in ("HEAD", "GET"):
         request = urllib.request.Request(url, method=method, headers=headers)
         try:
@@ -97,6 +96,24 @@ def check_url(url, timeout=10):
             return error.code, url
         except (urllib.error.URLError, http.client.HTTPException, TimeoutError, ValueError, OSError):
             return None, url
+    return None, url
+
+
+def check_url(url, timeout=10, retries=1, retry_delay=1.0, sleeper=time.sleep):
+    """Return (status, final_url) after following redirects.
+
+    status is None if the host could not be reached. final_url differs from
+    url when the link redirects, so callers can report moved links. Transient
+    failures (connection errors and 5xx answers) are retried `retries` times
+    with `retry_delay` seconds between attempts, since they are often temporary.
+    """
+    headers = {"User-Agent": "Mozilla/5.0 (deadlinks)"}
+    for attempt in range(retries + 1):
+        status, final_url = _request_once(url, headers, timeout)
+        transient = status is None or status in TRANSIENT_STATUS
+        if not transient or attempt == retries:
+            return status, final_url
+        sleeper(retry_delay)
     return None, url
 
 
@@ -142,8 +159,12 @@ def main(argv=None):
     parser.add_argument("--ignore", help="regex of URLs to skip")
     parser.add_argument("--json", action="store_true", help="print results as a JSON list")
     parser.add_argument("--moved", action="store_true", help="also report links that redirect")
+    parser.add_argument("--retries", type=int, default=1,
+                        help="times to retry transient failures (default 1)")
     args = parser.parse_args(argv)
-    dead, moved = find_dead(args.paths, args.timeout, args.workers, args.ignore)
+    checker = check_url if args.retries == 1 else (
+        lambda u, t: check_url(u, t, retries=args.retries))
+    dead, moved = find_dead(args.paths, args.timeout, args.workers, args.ignore, checker=checker)
     if args.json:
         records = [{"file": p, "line": n, "url": u, "status": s} for p, n, u, s in dead]
         if args.moved:
