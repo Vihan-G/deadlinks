@@ -1,3 +1,5 @@
+import pytest
+
 import deadlinks
 
 
@@ -209,3 +211,21 @@ def test_retries_cli_option_is_forwarded(tmp_path, capsys, monkeypatch):
     monkeypatch.setattr(deadlinks, "check_url", fake_check)
     assert deadlinks.main([str(tmp_path), "--retries", "3"]) == 0
     assert seen["retries"] == 3
+
+
+def test_negative_retries_is_rejected():
+    with pytest.raises(SystemExit) as excinfo:
+        deadlinks.main([".", "--retries", "-1"])
+    assert excinfo.value.code == 2
+
+
+def test_zero_workers_is_rejected():
+    with pytest.raises(SystemExit) as excinfo:
+        deadlinks.main([".", "--workers", "0"])
+    assert excinfo.value.code == 2
+
+
+def test_nonpositive_timeout_is_rejected():
+    with pytest.raises(SystemExit) as excinfo:
+        deadlinks.main([".", "--timeout", "0"])
+    assert excinfo.value.code == 2
