@@ -229,3 +229,8 @@ def test_nonpositive_timeout_is_rejected():
     with pytest.raises(SystemExit) as excinfo:
         deadlinks.main([".", "--timeout", "0"])
     assert excinfo.value.code == 2
+
+
+def test_check_url_survives_invalid_ipv6_url():
+    status, _ = deadlinks.check_url("http://[::1", timeout=1, retries=0)
+    assert status is None

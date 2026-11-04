@@ -86,8 +86,8 @@ TRANSIENT_STATUS = {500, 502, 503, 504}
 
 def _request_once(url, headers, timeout):
     for method in ("HEAD", "GET"):
-        request = urllib.request.Request(url, method=method, headers=headers)
         try:
+            request = urllib.request.Request(url, method=method, headers=headers)
             with urllib.request.urlopen(request, timeout=timeout) as response:
                 return response.status, response.geturl()
         except urllib.error.HTTPError as error:
