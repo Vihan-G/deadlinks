@@ -162,6 +162,12 @@ def main(argv=None):
     parser.add_argument("--retries", type=int, default=1,
                         help="times to retry transient failures (default 1)")
     args = parser.parse_args(argv)
+    if args.retries < 0:
+        parser.error("--retries must be >= 0")
+    if args.workers < 1:
+        parser.error("--workers must be >= 1")
+    if args.timeout <= 0:
+        parser.error("--timeout must be > 0")
     checker = check_url if args.retries == 1 else (
         lambda u, t: check_url(u, t, retries=args.retries))
     dead, moved = find_dead(args.paths, args.timeout, args.workers, args.ignore, checker=checker)
@@ -184,4 +190,3 @@ def main(argv=None):
 
 if __name__ == "__main__":
     sys.exit(main())
-
