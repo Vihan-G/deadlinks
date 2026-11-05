@@ -22,10 +22,19 @@ PLACEHOLDER_HOSTS = {"example.com", "example.org", "example.net", "localhost", "
 
 
 def _clean_url(url):
-    url = url.rstrip(".,;:!?*_")
-    while url.endswith(")") and url.count("(") < url.count(")"):
-        url = url[:-1].rstrip(".,;:!?*_")
-    return url
+    # A ")" with no matching "(" earlier in the URL is not part of it: it is
+    # Markdown's ](...) closer or plain text wrapping the link, and anything
+    # after it (e.g. the "-compliant" in [PEP 440](url)-compliant) is prose.
+    depth = 0
+    for pos, ch in enumerate(url):
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            if depth == 0:
+                url = url[:pos]
+                break
+            depth -= 1
+    return url.rstrip(".,;:!?*_")
 
 
 def extract_urls(text):
