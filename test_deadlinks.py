@@ -234,3 +234,8 @@ def test_nonpositive_timeout_is_rejected():
 def test_check_url_survives_invalid_ipv6_url():
     status, _ = deadlinks.check_url("http://[::1", timeout=1, retries=0)
     assert status is None
+
+
+def test_markdown_link_suffix_is_not_part_of_url():
+    text = "requires [PEP 440](https://peps.python.org/pep-0440)-compliant versions"
+    assert deadlinks.extract_urls(text) == [(1, "https://peps.python.org/pep-0440")]
