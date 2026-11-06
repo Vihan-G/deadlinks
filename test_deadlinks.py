@@ -239,3 +239,9 @@ def test_check_url_survives_invalid_ipv6_url():
 def test_markdown_link_suffix_is_not_part_of_url():
     text = "requires [PEP 440](https://peps.python.org/pep-0440)-compliant versions"
     assert deadlinks.extract_urls(text) == [(1, "https://peps.python.org/pep-0440")]
+
+
+def test_vcs_install_specifier_is_skipped():
+    text = ('poetry add git+https://github.com/org/repo.git@main\n'
+            'but see https://github.com/org/docs for details\n')
+    assert deadlinks.extract_urls(text) == [(2, "https://github.com/org/docs")]

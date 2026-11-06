@@ -15,7 +15,9 @@ import urllib.error
 import urllib.request
 
 EXTENSIONS = (".md", ".rst", ".txt", ".py")
-URL_RE = re.compile(r"https?://[^\s<>\]\"'`]+")
+# URLs prefixed with "git+" are PEP 508 / pip VCS install specifiers
+# (git+https://github.com/org/repo.git@ref), not links a reader opens.
+URL_RE = re.compile(r"(?<!git\+)https?://[^\s<>\]\"'`]+")
 SKIP_DIRS = {".git", "node_modules", "_build", "build", "dist", ".venv", "venv"}
 # Hosts that are placeholders in docs and never resolve to real pages.
 PLACEHOLDER_HOSTS = {"example.com", "example.org", "example.net", "localhost", "127.0.0.1", "0.0.0.0"}
