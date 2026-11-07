@@ -128,6 +128,13 @@ def test_rst_multi_line_wrapped_target():
     assert deadlinks.extract_urls(text) == [(1, "https://a.test/docs/reference/guide.html")]
 
 
+def test_rst_wrapped_target_drops_angle_bracket_closer():
+    text = ("the other flavors `github accepts <https://help.example/en/articles/\n"
+            "   closing-issues-using-keywords>`_.\n")
+    assert deadlinks.extract_urls(text) == [
+        (1, "https://help.example/en/articles/closing-issues-using-keywords")]
+
+
 def test_indented_line_after_url_is_not_joined():
     text = "Docs at https://docs.test/page\n    indented_code()\n"
     assert deadlinks.extract_urls(text) == [(1, "https://docs.test/page")]
