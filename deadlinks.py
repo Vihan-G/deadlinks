@@ -36,7 +36,7 @@ def _clean_url(url):
                 url = url[:pos]
                 break
             depth -= 1
-    return url.rstrip(".,;:!?*_")
+    return url.rstrip(".,;:!?*_<>`")
 
 
 def extract_urls(text):
