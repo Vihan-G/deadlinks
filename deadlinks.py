@@ -118,7 +118,10 @@ def check_url(url, timeout=10, retries=1, retry_delay=1.0, sleeper=time.sleep):
     failures (connection errors and 5xx answers) are retried `retries` times
     with `retry_delay` seconds between attempts, since they are often temporary.
     """
-    headers = {"User-Agent": "Mozilla/5.0 (deadlinks)"}
+    # A bare script UA gets 404s/403s from bot-filtering sites (e.g. Discourse)
+    # for pages a browser opens fine, which reads as a false "dead" report.
+    headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                            "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"}
     for attempt in range(retries + 1):
         status, final_url = _request_once(url, headers, timeout)
         transient = status is None or status in TRANSIENT_STATUS
