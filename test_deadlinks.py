@@ -160,6 +160,19 @@ class _FakeResponse:
         return False
 
 
+def test_check_url_sends_browser_user_agent(monkeypatch):
+    seen = []
+
+    def fake_urlopen(request, timeout=10):
+        seen.append(request.get_header("User-agent"))
+        return _FakeResponse(200, "https://x.test/")
+
+    monkeypatch.setattr(deadlinks.urllib.request, "urlopen", fake_urlopen)
+    deadlinks.check_url("https://x.test/", retries=0)
+    assert seen and seen[0].startswith("Mozilla/5.0 ")
+    assert "AppleWebKit" in seen[0]
+
+
 def test_check_url_retries_transient_5xx(monkeypatch):
     import urllib.error
     calls = []
