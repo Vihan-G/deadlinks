@@ -265,3 +265,21 @@ def test_vcs_install_specifier_is_skipped():
     text = ('poetry add git+https://github.com/org/repo.git@main\n'
             'but see https://github.com/org/docs for details\n')
     assert deadlinks.extract_urls(text) == [(2, "https://github.com/org/docs")]
+
+
+def test_reserved_example_subdomains_are_placeholders():
+    # Django's template docs use www.example.org, not just the bare host.
+    for domain in ("example.com", "example.org", "example.net"):
+        for host in (domain, "www." + domain, "api.docs." + domain):
+            assert deadlinks.is_placeholder("https://" + host + "/path")
+            assert deadlinks.is_placeholder("http://" + host.upper() + ":8000/path")
+    for host in ("notexample.org", "example.net.real.org", "www.example.com.evil.org"):
+        assert not deadlinks.is_placeholder("https://" + host + "/path")
+
+
+def test_find_dead_does_not_request_reserved_example_subdomains(tmp_path):
+    doc = tmp_path / "doc.md"
+    doc.write_text("https://www.example.org/foo?a=b&c=d\nhttps://api.example.net/gone\n")
+    def unexpected_request(url, timeout):
+        raise AssertionError("placeholder URL was checked: " + url)
+    assert deadlinks.find_dead([str(doc)], checker=unexpected_request) == ([], [])
