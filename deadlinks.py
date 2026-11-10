@@ -76,7 +76,11 @@ def extract_urls(text):
 
 def is_placeholder(url):
     host = re.sub(r"^https?://", "", url).split("/")[0].split(":")[0].lower()
-    return host in PLACEHOLDER_HOSTS or host.endswith(".example.com") or "{" in url or "<" in url
+    example_subdomain = any(
+        host.endswith("." + domain)
+        for domain in ("example.com", "example.org", "example.net")
+    )
+    return host in PLACEHOLDER_HOSTS or example_subdomain or "{" in url or "<" in url
 
 
 def iter_files(paths):
