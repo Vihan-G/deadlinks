@@ -11,7 +11,7 @@ docs/guide.md:42: 404 https://example.org/old-page
 ```
 
 - Checks each unique URL once and reports its first location.
-- Skips placeholder hosts (`example.com`, `localhost`) and templated URLs like `https://x.org/{id}`.
+- Skips placeholder hosts (`example.com`, `example.org`, `example.net` and their subdomains, plus `localhost`) and templated URLs like `https://x.org/{id}`.
 - Tries `HEAD` first and falls back to `GET` for servers that reject `HEAD`.
 - Network errors and timeouts are not reported as dead, to avoid false alarms.
 - Can also report links that redirect (`--moved`) so they can be updated to their final address.
@@ -27,4 +27,3 @@ pytest
 ```
 
 Python 3.8+. MIT licensed.
-
