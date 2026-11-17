@@ -283,3 +283,47 @@ def test_find_dead_does_not_request_reserved_example_subdomains(tmp_path):
     def unexpected_request(url, timeout):
         raise AssertionError("placeholder URL was checked: " + url)
     assert deadlinks.find_dead([str(doc)], checker=unexpected_request) == ([], [])
+
+
+@pytest.mark.parametrize("form", [
+    '<form method="POST" action="https://submit.test/newsletter">',
+    "<FORM ACTION='https://submit.test/newsletter' method='post'>",
+    '<form action=https://submit.test/newsletter method=post>',
+    '<form\n method="post"\n action="https://submit.test/newsletter">',
+    '<form action="https://submit.test/newsletter" />',
+])
+def test_form_actions_are_not_reader_links(form):
+    text = form + '\n<a href="https://reader.test/page">read</a>'
+    assert deadlinks.extract_urls(text) == [
+        (text.count('\n') + 1, 'https://reader.test/page')
+    ]
+
+
+def test_form_action_mask_keeps_other_attributes_and_same_line_links():
+    text = ('<form data-help="https://help.test/page" '
+            'action="https://submit.test/post">'
+            '<a href="https://reader.test/page">read</a> https://plain.test/page')
+    assert deadlinks.extract_urls(text) == [
+        (1, 'https://help.test/page'), (1, 'https://reader.test/page'),
+        (1, 'https://plain.test/page')
+    ]
+
+
+def test_action_text_inside_other_attributes_is_not_masked():
+    text = '<form title="action=ignore" data-url="https://reader.test/page">'
+    assert deadlinks.extract_urls(text) == [(1, 'https://reader.test/page')]
+
+
+def test_form_action_is_never_requested(tmp_path):
+    doc = tmp_path / 'doc.md'
+    doc.write_text('<form method="POST" action="https://submit.test/post">')
+    def unexpected_request(url, timeout):
+        raise AssertionError('form action was requested: ' + url)
+    assert deadlinks.find_dead([str(doc)], checker=unexpected_request) == ([], [])
+
+
+
+def test_form_action_mask_handles_quoted_angles_and_action_like_text():
+    text = ('<form title="x > y action=keep" action="https://submit.test/post">'
+            '<a href="https://reader.test/page">read</a>')
+    assert deadlinks.extract_urls(text) == [(1, 'https://reader.test/page')]
