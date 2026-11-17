@@ -6,6 +6,7 @@ Exit code is 1 if any dead link is found, 0 otherwise.
 import argparse
 import concurrent.futures as cf
 import http.client
+from html.parser import HTMLParser
 import json
 import os
 import re
@@ -39,6 +40,39 @@ def _clean_url(url):
     return url.rstrip(".,;:!?*_<>`")
 
 
+class _FormActionMasker(HTMLParser):
+    """Hide form submission targets without changing source line numbers."""
+
+    def __init__(self, text):
+        super().__init__(convert_charrefs=False)
+        self.text = list(text)
+        self.line_starts = [0]
+        self.line_starts.extend(m.end() for m in re.finditer("\n", text))
+
+    def handle_starttag(self, tag, attrs):
+        if tag != "form" or not any(name == "action" for name, _ in attrs):
+            return
+        raw = self.get_starttag_text()
+        line, column = self.getpos()
+        start = self.line_starts[line - 1] + column
+        # Tokenize whole attributes so text inside another quoted value cannot
+        # be mistaken for an action attribute. Preserve all other URLs.
+        attribute = re.compile(
+            r"([^\s=<>/]+)(?:\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]+))?"
+        )
+        for match in attribute.finditer(raw, len("<form")):
+            if match.group(1).lower() == "action" and match.group(2) is not None:
+                for i in range(start + match.start(2), start + match.end(2)):
+                    if self.text[i] not in "\r\n":
+                        self.text[i] = " "
+
+
+def _mask_form_actions(text):
+    parser = _FormActionMasker(text)
+    parser.feed(text)
+    return "".join(parser.text)
+
+
 def extract_urls(text):
     """Return a list of (line_number, url) found in text.
 
@@ -46,7 +80,7 @@ def extract_urls(text):
     single-token lines, which is how reStructuredText wraps long targets;
     without this a wrapped target is checked (and reported) truncated.
     """
-    lines = text.splitlines()
+    lines = _mask_form_actions(text).splitlines()
     found = []
     i = 0
     while i < len(lines):
